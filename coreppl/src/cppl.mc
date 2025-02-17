@@ -40,7 +40,7 @@ mexpr
 use CPPLLang in
 
 -- Use the arg.mc library to parse arguments
-let result = argParse default config in
+let result = argParse defaultArgs config in
 match result with ParseOK r then
   let options: Options = r.options in
   -- Print menu if not exactly one file argument
@@ -79,7 +79,7 @@ match result with ParseOK r then
         with libraries = libs
         , cLibraries = clibs
         } in
-      (if options.outputMc then
+      (if options.outputMl then
         writeFile "program.ml" prog
        else ());
       let res = ocamlCompileWithConfig opts prog in
