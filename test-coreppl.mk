@@ -23,6 +23,7 @@ test-staticdelay-files=$(shell find coreppl/test/coreppl-to-mexpr/static-delay -
 test-cli-files=\
   $(shell find coreppl/test/coreppl-to-mexpr/cli -name "*.mc")
 test-expectation-files=$(shell find coreppl/test/coreppl-to-mexpr/expectation -name "*.mc")
+test-dppl-files=$(shell find coreppl/test/coreppl-to-mexpr/dppl -name "*.mc")
 
 .PHONY: all
 all: compiler cppl
@@ -57,6 +58,9 @@ expectation: ${test-expectation-files}
 .PHONY: inference
 inference: ${test-inference}
 
+.PHONY: dppl
+dppl: ${test-dppl-files}
+
 export CPPL_NAME
 export MIDPPL_PATH=${CURDIR}
 export MIDPPL_SRC=${MIDPPL_PATH}/${CPPL_SRC}
@@ -75,4 +79,8 @@ ${test-staticdelay-files}::
 
 # Expectation tests
 ${test-expectation-files}::
+	@./make test-cppl $@ "build/${CPPL_NAME}"
+
+# DPPL tests
+${test-dppl-files}::
 	@./make test-cppl $@ "build/${CPPL_NAME}"
