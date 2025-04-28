@@ -367,11 +367,8 @@ lang MExprPPLLightweightMCMC
     let i = tyWithInfo info in i tyunknown_
 
   sem transformPreAlignedCps unalignedNames =
-  | TmLet ({ ident = ident, body = TmAssume r} & b) & t ->
-    if setMem ident unalignedNames then
+  | TmLet ({body = TmAssume (r & {driftKernel = None _})} & b) & t ->
       TmLet {b with body = TmAssumeUnaligned r}
-    else t
-
   | t -> t
 
   -- Compile CorePPL constructs to MExpr
@@ -419,7 +416,7 @@ lang MExprPPLLightweightMCMC
   sem compileAlignedCps config =
   | x ->
     let log = mkPhaseLogState x.options.debugDumpPhases x.options.debugPhases in
-    let t = x.extractNoHigherOrderConsts (generateKernels config.driftScale) in
+    let t = x.extractNoHigherOrderConsts (lam x. x) in
     endPhaseStatsExpr log "extract-no-higher-order-consts-one" t;
 
     -- printLn ""; printLn "--- INITIAL ANF PROGRAM ---";
@@ -447,8 +444,8 @@ lang MExprPPLLightweightMCMC
       match config.cps with "partial" then
         -- Partial checkpoint/suspension analysis
         let checkpoint = lam t.
-          match t with TmLet { ident = ident, body = TmAssume _ } then
-            not (setMem ident unalignedNames)
+          match t with TmLet {body = TmAssume {driftKernel = Some _}}
+          then true
           else false
         in
         let checkPointNames: Set Name =
