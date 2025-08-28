@@ -112,8 +112,8 @@ let resetState : State Result -> () = lam state. (
 -- Function to modify the state accordently to the need of the inference method
 let modifyState : State Result -> [(Any,Float,Cont Result)] -> [[(Any, Float, Int)]]
                   -> [(Any,Float)] -> [[(Any, Float, Int)]] -> [(Any, Float, Int)]
-                  -> Float -> Float -> () = 
-                  lam state. lam alignedTrace. lam unalignedTraces. lam oldAlignedTrace. 
+                  -> Float -> Float -> () =
+                  lam state. lam alignedTrace. lam unalignedTraces. lam oldAlignedTrace.
                   lam oldUnalignedTraces. lam s2. lam weight. lam priorWeight.
     modref state.oldAlignedTrace oldAlignedTrace;
     modref state.oldUnalignedTraces (cons (emptyList ()) (cons (reverse s2) oldUnalignedTraces));
@@ -270,11 +270,11 @@ let runNext: all acc. all dAcc. Config Result acc dAcc -> (State Result -> Resul
 
   match resBehav with (acc, (unalignedResamp, invalidIndex)) in
   if lti invalidIndex 0 then
-    let oldUnalignedTraces = 
+    let oldUnalignedTraces =
       zipWith (lam t. lam b. if b then t else []) (deref state.oldUnalignedTraces) unalignedResamp in
     let oldAlignedTrace = deref state.oldAlignedTrace in
     resetState state;
-    (if eqi invalidIndex (negi 1) then 
+    (if eqi invalidIndex (negi 1) then
       modref state.oldAlignedTrace oldAlignedTrace else ());
     modref state.oldUnalignedTraces oldUnalignedTraces;
     (acc, (model state))
@@ -287,8 +287,8 @@ let runNext: all acc. all dAcc. Config Result acc dAcc -> (State Result -> Resul
       lam unalignedResamp.
         match (alignedTrace,unalignedTraces, unalignedResamp)
         with ([s1] ++ alignedTrace, [s2] ++ unalignedTraces, [s3] ++ unalignedResamp) then
-          (if (not s3) then 
-            error "mcmc doesn't support redrawing unaligned assumes before the chosen aligned assume." 
+          (if (not s3) then
+            error "mcmc doesn't support redrawing unaligned assumes before the chosen aligned assume."
            else ());
           if gti i 0 then
             rec (subi i 1) alignedTrace unalignedTraces
@@ -330,6 +330,17 @@ let runNext: all acc. all dAcc. Config Result acc dAcc -> (State Result -> Resul
 let run : all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) -> use RuntimeDistBase in Dist Result =
   lam config. lam model.
 
+  modref state.weight 0.;
+  modref state.driftHastingRatio 0.;
+  modref state.prevWeightReused 0.;
+  modref state.weightReused 0.;
+  modref state.alignedTrace (emptyList ());
+  modref state.unalignedTraces (toList [(emptyList ())]);
+  modref state.reuseUnaligned true;
+  modref state.oldAlignedTrace (emptyList ());
+  modref state.oldUnalignedTraces (emptyList ());
+  modref state.alignedTraceLength (negi 1);
+
   recursive let mh : [Result] -> Float -> Float -> Result -> dAcc -> (acc, Bool) -> Int -> [Result] =
     lam keptSamples. lam prevWeight. lam prevPriorWeight. lam prevSample. lam debugState. lam continueState. lam iter.
       match continueState with (continueState, true) then
@@ -349,7 +360,7 @@ let run : all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) 
         let prevWeightReused = deref state.prevWeightReused in
         -- Calculate the Hastings ratio.
         let logMhAcceptProb = minf 0. (addf
-                    (addf 
+                    (addf
                       (mulf beta (subf weight prevWeight))
                       (subf weightReused prevWeightReused))
                     driftHastingRatio)
@@ -387,7 +398,7 @@ let run : all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) 
   -- First sample -- call the model until we get a non-zero weight
   recursive let firstSample : (State Result -> Result) -> State Result -> Int -> State Result =
     lam model. lam state. lam i.
-      let sample = model state in 
+      let sample = model state in
       let weight = deref state.weight in
       let weightReused = deref state.weightReused in
       let priorWeight = deref state.priorWeight in
@@ -397,11 +408,11 @@ let run : all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) 
         -- printLn (join ["Try ", int2string i, " at sampling positive prob. sample. Sample weight: ", float2string (weight)]);
         firstSample model state (addi i 1)
       else sample
-    in 
+    in
 
   -- Used to keep track of acceptance ratio
   mcmcAcceptInit ();
- 
+
   let sample = firstSample model state 1 in
   let weight = deref state.weight in
   let priorWeight = deref state.priorWeight in
