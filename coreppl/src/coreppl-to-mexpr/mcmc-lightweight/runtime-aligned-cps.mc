@@ -273,6 +273,17 @@ let runNext: all acc. all dAcc. Config Result acc dAcc -> (State Result -> Resul
 let run : all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) -> use RuntimeDistBase in Dist Result =
   lam config. lam model.
 
+  modref state.weight 0.;
+  modref state.driftHastingRatio 0.;
+  modref state.prevWeightReused 0.;
+  modref state.weightReused 0.;
+  modref state.alignedTrace (emptyList ());
+  modref state.unalignedTraces (toList [(emptyList ())]);
+  modref state.reuseUnaligned true;
+  modref state.oldAlignedTrace (emptyList ());
+  modref state.oldUnalignedTraces (emptyList ());
+  modref state.alignedTraceLength (negi 1);
+
   recursive let mh : [Result] -> Float -> Result -> dAcc -> (acc, Bool) -> Int -> [Result] =
     lam keptSamples. lam prevWeight. lam prevSample. lam debugState. lam continueState. lam iter.
       match continueState with (continueState, true) then
