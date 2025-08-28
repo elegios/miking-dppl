@@ -249,7 +249,7 @@ let sampleUnaligned: all a. Int -> use RuntimeDistBase in Dist a -> a = lam i. l
 
 -- Function to run new MH iterations.
 let runNext: all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) -> Float -> Result =
-  lam config. lam model. lam globalProb. 
+  lam config. lam model. lam globalProb.
 
   -- Enable global modifications with probability globalProb
   let modGlobal: Bool = bernoulliSample globalProb in
@@ -311,6 +311,17 @@ let runNext: all acc. all dAcc. Config Result acc dAcc -> (State Result -> Resul
 let run : all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) -> use RuntimeDistBase in Dist Result =
   lam config. lam model.
 
+  modref state.weight 0.;
+  modref state.driftHastingRatio 0.;
+  modref state.prevWeightReused 0.;
+  modref state.weightReused 0.;
+  modref state.alignedTrace (emptyList ());
+  modref state.unalignedTraces (toList [(emptyList ())]);
+  modref state.reuseUnaligned true;
+  modref state.oldAlignedTrace (emptyList ());
+  modref state.oldUnalignedTraces (emptyList ());
+  modref state.alignedTraceLength (negi 1);
+
   recursive let mh : [Result] -> Float -> Float -> Result -> dAcc -> (acc, Bool) -> Int -> [Result] =
     lam keptSamples. lam prevWeight. lam prevPriorWeight. lam prevSample. lam debugState. lam continueState. lam iter.
       match continueState with (continueState, true) then
@@ -331,7 +342,7 @@ let run : all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) 
         let prevWeightReused = deref state.prevWeightReused in
         -- Calculate the Hastings ratio.
         let logMhAcceptProb = minf 0. (addf
-                    (addf 
+                    (addf
                       (mulf beta (subf weight prevWeight))
                       (subf weightReused prevWeightReused))
                     driftHastingRatio)
@@ -369,7 +380,7 @@ let run : all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) 
   -- First sample -- call the model until we get a non-zero weight
   recursive let firstSample : (State Result -> Result) -> State Result -> Int -> State Result =
     lam model. lam state. lam i.
-      let sample = model state in 
+      let sample = model state in
       let weight = deref state.weight in
       let weightReused = deref state.weightReused in
       let priorWeight = deref state.priorWeight in
@@ -379,11 +390,11 @@ let run : all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) 
         -- printLn (join ["Try ", int2string i, " at sampling positive prob. sample. Sample weight: ", float2string (weight)]);
         firstSample model state (addi i 1)
       else sample
-    in 
+    in
 
   -- Used to keep track of acceptance ratio
   mcmcAcceptInit ();
- 
+
   let sample = firstSample model state 1 in
   let weight = deref state.weight in
   let priorWeight = deref state.priorWeight in
