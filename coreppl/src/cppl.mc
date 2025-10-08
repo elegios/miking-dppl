@@ -62,10 +62,10 @@ let loader = enableDefaultInferMethod options.defaultMethod loader in
 let loader = enableCPPLCompilation options.transformations loader in
 let loader = enableUtestGeneration (if options.frontend.test then isFromModelFileOrStatic else lam. false) loader in
 let loader = enablePprintGeneration loader in
-endPhaseStatsExpr log "mk-cppl-loader" unit_;
+endPhaseStatsProg log "mk-cppl-loader" {decls = getDecls loader, expr = unit_};
 
 let loader = (includeFileTypeExn (FCorePPL {isModel = true}) "." filename loader).1 in
-endPhaseStatsExpr log "include-file" unit_;
+endPhaseStatsProg log "include-file" {decls = getDecls loader, expr = unit_};
 
 let ast = buildFullAst loader in
 endPhaseStatsExpr log "build-full-ast" ast;
