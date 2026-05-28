@@ -852,7 +852,27 @@ lang IdealizedPValTransformation = Dist + Assume + Weight + Observe + TempLamAst
     match mapLookup vIdent sc.functionDefinitions with Some def
     then ({sc with functionDefinitions = mapInsert ident def sc.functionDefinitions}, st)
     else _defaultLetSpecialization sc st x
-  | DeclLet {ident = ident, body = body & TmLam _} ->
+  | DeclLet (x & {ident = ident, body = body & TmLam _}) ->
+    if eqString (nameGetStr ident) "mkNode" then
+      recursive let work = lam sc. lam st. lam tm.
+        match tm with TmLam x then
+          let tyParam = tyToPurePType sc x.tyParam in
+          let sc = addBinding x.ident (x.ident, tyParam) sc in
+          match work sc st x.body with (params, (st, (body, ty))) in
+          (cons tyParam params, (st, (TmLam {x with body = body}, ty)))
+        else ([], specializeExpr sc st tm) in
+      let n = nameSetNewSym ident in
+      match work sc st body with (params, (st, (body, ty))) in
+      let spec = mapSingleton (seqCmp ptyCmp) params
+        { ident = n
+        , ty = ty
+        , decl = Some {x with ident = n, body = body}
+        , depth = sc.depth
+        } in
+      ( sc
+      , {st with specializations = mapInsert ident spec st.specializations}
+      )
+    else
     recursive let work = lam params. lam tm.
       match tm with TmLam x
       then work (snoc params x.ident) x.body
