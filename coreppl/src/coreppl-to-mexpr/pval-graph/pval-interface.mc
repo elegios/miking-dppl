@@ -176,6 +176,11 @@ lang PValInterface = RuntimeDistBase
     match p_apply st tmp as with (st, res) in
     (st, res)
 
+  sem p_getSeq : all st. all x. PValState st
+    -> [PVal x]
+    -> PVal Int
+    -> (PValState st, PVal x)
+
   -- Introduce a weight.
   sem p_weight : all st. all st2. all a. PValState st
     -> (st -> PWeightRef -> st2)

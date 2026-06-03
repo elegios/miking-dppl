@@ -22,6 +22,7 @@ lang PValStateTransformation = TempLamAst + AutoTyRecord + IdealizedPValTransfor
     , p_weight : Expr
     , p_export : Expr
     , p_traverseSeq : Expr
+    , p_getSeq : Expr
     , storeAssume : Expr
     , storeSubmodel : Expr
     , storeExport : Expr
@@ -71,6 +72,9 @@ lang PValStateTransformation = TempLamAst + AutoTyRecord + IdealizedPValTransfor
     match pvalTransExprNoSub {env with currStateName = innerStateName} f.body with (wrapB, body) in
     let f = nulam_ innerStateName (TmLam {f with body = wrapB body}) in
     (None (), (wrap, appf3_ env.p_traverseSeq (nvar_ stateName) f val))
+  | (TmConst {val = CPGetSeq _}, args) ->
+    match pvalTransSeqNoSub env args with (stateName, (wrap, args)) in
+    (None (), (wrap, appSeq_ env.p_getSeq (cons (nvar_ stateName) args)))
   | (TmConst {val = CPApply _}, [f, val]) ->
     match pvalTransPeel env f with (sub, stateName, (wrapF, f)) in
     match pvalTransPeelNoSub {env with currStateName = stateName} val with (stateName, (wrapVal, val)) in

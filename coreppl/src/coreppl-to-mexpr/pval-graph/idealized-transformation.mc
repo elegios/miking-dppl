@@ -285,6 +285,7 @@ lang IdealizedPValTransformation = Dist + Assume + Weight + Observe + TempLamAst
   | CPApply
   | CPJoin
   | CPTraverseSeq
+  | CPGetSeq
   | CPExport
 
   sem getConstStringCode indent =
@@ -296,6 +297,7 @@ lang IdealizedPValTransformation = Dist + Assume + Weight + Observe + TempLamAst
   | CPJoin _ -> "px_join"
   | CPExport _ -> "px_export"
   | CPTraverseSeq _ -> "px_traverseSeq"
+  | CPGetSeq _ -> "px_getSeq"
 
   sem ptyCmp : PType -> PType -> Int
   sem ptyCmp l = | r ->
@@ -707,6 +709,10 @@ lang IdealizedPValTransformation = Dist + Assume + Weight + Observe + TempLamAst
     else match definition with Some definition
     then _specializeCall sc st f args retTy (SCKDefFlexible definition)
     else _specializeCall sc st f args retTy (SCKInflexible ())
+  | {f = f & TmConst {val = CGet _}, args = args & [seq, i], ret = retTy} ->
+    match (seq, i) with ((_, PLater (PSeq (ret & PHere {wrapped = Wrapped _}))), (_, PHere {wrapped = Wrapped _})) then
+      (st, (appf2_ (uconst_ (CPGetSeq ())) seq.0 i.0, ret))
+    else _specializeCall sc st f args retTy (SCKPolyFlexible (tyConst (CGet ())))
   | {f = f & TmConst {val = c}, args = args, ret = retTy} ->
     match tyConst c with ty & TyAll _
     then _specializeCall sc st f args retTy (SCKPolyFlexible ty)

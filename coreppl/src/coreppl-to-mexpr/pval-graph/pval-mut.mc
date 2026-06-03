@@ -178,6 +178,10 @@ lang MutPVal = PValInterface
       } in
     PVS st
 
+  sem p_getSeq st xs = | idx ->
+    match p_map st (get xs) idx with (st, ret) in
+    p_join st ret
+
   sem p_pure = | a -> PVal {value = ref a, changeId = ref 0}
 
   sem p_map st f = | PVal a ->

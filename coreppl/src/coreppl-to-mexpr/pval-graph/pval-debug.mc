@@ -109,6 +109,10 @@ lang PValVisiGraph = PValInterface
     let node = PVNExport {id = length nodes, a = getID x.node} in
     PVS (snoc nodes node)
 
+  sem p_getSeq st xs = | idx ->
+    match p_map st (get xs) idx with (st, ret) in
+    p_join st ret
+
   sem p_pure = | a ->
     let node = PVNPure {id = negi 1} in
     PVal {val = a, node = node}

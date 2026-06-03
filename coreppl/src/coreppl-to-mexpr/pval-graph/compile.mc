@@ -165,6 +165,7 @@ lang SimplePValGraphCompiler
       , p_weight = getPValVar "p_weight"
       , p_export = getPValVar "p_export"
       , p_traverseSeq = getPValVar "p_traverseSeq"
+      , p_getSeq = getPValVar "p_getSeq"
       , mapAccumL = getPValVar "reexportMapAccumL"
       , storeAssume = getPValVar "simpleStoreAssume"
       , storeSubmodel = getPValVar "simpleStoreSubmodel"
