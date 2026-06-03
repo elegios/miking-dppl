@@ -66,9 +66,16 @@ lang MutPVal = PValInterface
       for_ updates (lam up. up st) in
     (st.st, st.initWeight, update)
 
-  sem instantiate f = | st ->
-    match _initModel 0 st f with (st, initWeight, update) in
-    PVI {st = st, update = update, permanentWeight = initWeight, id = 0}
+  syn PValPrep st =
+  | PVP (() -> PValInstance Complete st)
+
+  sem p_prepare f = | st ->
+    let f = lam.
+      match _initModel 0 st f with (st, initWeight, update) in
+      PVI {st = st, update = update, permanentWeight = initWeight, id = 0} in
+    PVP f
+  sem instantiate = | PVP f ->
+    f ()
 
   sem getWeight =
   | PVI x -> x.permanentWeight

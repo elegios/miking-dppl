@@ -79,9 +79,16 @@ lang PValVisiGraph = PValInterface
   syn PValInstance complete st =
   | PVI [PValNode]
 
-  sem instantiate f = | _ ->
-    match f (PVS []) with PVS nodes in
-    PVI nodes
+  syn PValPrep st =
+  | PVP (() -> PValInstance Complete st)
+
+  sem p_prepare f = | st ->
+    let f = lam.
+      match f (PVS []) with PVS nodes in
+      PVI nodes in
+    PVP f
+  sem instantiate = | PVP f ->
+    f ()
 
   sem getID : PValNode -> NodeID
   sem getID =

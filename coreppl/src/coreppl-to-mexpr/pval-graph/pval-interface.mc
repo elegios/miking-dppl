@@ -16,13 +16,16 @@ lang PValInterface = RuntimeDistBase
   syn PSubmodelRef st =
 
 
+  syn PValPrep st =
   syn PValInstance complete st =
 
 
   -- === Working with an instance of a model ===
 
+  -- Do (optional) pre-processing of the model, before instantiating it
+  sem p_prepare : all st. all st2. (PValState st -> PValState st2) -> st -> PValPrep st2
   -- Create a new instance of a model (completely evaluated).
-  sem instantiate : all st. all st2. (PValState st -> PValState st2) -> st -> PValInstance Complete st2
+  sem instantiate : all st. PValPrep st -> PValInstance Complete st
   -- Get the state in the instance (that contains references to
   -- internals of the model).
   sem getSt : all complete. all st. PValInstance complete st -> st
@@ -235,4 +238,35 @@ lang PValDefaultImpls = PValInterface
   sem p_subApply st store ist f = | a ->
     match p_apply st f a with (st, f) in
     p_sub st store ist f
+
+  sem p_directWeight : all st. all st2. PValState st
+    -> (st -> PWeightRef -> st2)
+    -> PVal Float
+    -> PValState st2
+
+  sem p_weight st store f = | a ->
+    match p_map st f a with (st, a) in
+    p_directWeight st store a
+end
+
+lang PValPPureSimpl = PValInterface
+  syn PVal a = | PPure a
+
+  syn PExportRef a = | PEFPure a
+
+  sem p_mapSt : all st. all st2. (st -> st2) -> PValState st -> PValState st2
+
+  sem p_pure = | a -> PPure a
+
+  sem p_cache st eq = | PPure a -> (st, PPure a)
+
+  sem p_export st store = | PPure a -> p_mapSt (lam st. store st (PEFPure a)) st
+
+  sem p_map st f = | PPure a -> (st, PPure (f a))
+
+  sem p_apply st f = | a -> p_apply_ st (f, a)
+  sem p_apply_ st =
+  | (PPure f, PPure a) -> (st, PPure (f a))
+  | (PPure f, a & !PPure _) -> p_map st f a
+  | (f & !PPure _, PPure a) -> p_map st (lam f. f a) f
 end

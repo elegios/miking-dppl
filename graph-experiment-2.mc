@@ -504,7 +504,7 @@ end
 let result =
   printLn "\n=== bern_and ===";
   let globalProb = 0.1 in
-  let iterations = 1000000 in
+  let iterations = 1000 in
   let toString = bool2string in
   let mkHisto = histogram cmpBool in
   let summarizePVal = lam label. lam pair.
@@ -631,7 +631,7 @@ end
 let result =
   printLn "\n=== simple_bind ===";
   let globalProb = 0.1 in
-  let iterations = 100000 in
+  let iterations = 1000 in
   let toString = bool2string in
   let mkHisto = histogram cmpBool in
   let summarizePVal = lam label. lam pair.
@@ -833,7 +833,7 @@ end
 let result =
   printLn "\n=== manual_geometric ===";
   let globalProb = 0.1 in
-  let iterations = 1000000 in
+  let iterations = 1000 in
   let toString = int2string in
   let mkHisto = histogram subi in
   let summarizePVal = lam label. lam pair.
@@ -977,7 +977,7 @@ end
 let result =
   printLn "\n=== coin ===";
   let globalProb = 0.1 in
-  let iterations = 100000 in
+  let iterations = 1000000 in
   let toString = interval2string in
   let mkHisto = bucket 10 0.0 1.0 in
   let summarizePVal = lam label. lam pair.
@@ -1040,6 +1040,9 @@ let result =
   let run = lam.
     infer (SimplePValGraph {run = simplePValGraphMCMC {globalProb = globalProb, iterations = iterations}}) baseline in
   summarizeBaseline "simple-pval-graph" (timeF run);
+  let run = lam.
+    infer (SimplePValGraph {experiment = 1, run = simplePValGraphMCMC {globalProb = globalProb, iterations = iterations}}) baseline in
+  summarizeBaseline "simple-pval-graph experiment" (timeF run);
   ()
 
 
@@ -1060,7 +1063,12 @@ let initTrees =
   , Leaf {id = 1, x = 5.0}
   , Leaf {id = 2, x = 10.0}
   , Leaf {id = 3, x = 15.0}
-  -- , Leaf {id = 4, x = 20.0}
+  , Leaf {id = 4, x = 20.0}
+  , Leaf {id = 5, x = 25.0}
+  , Leaf {id = 6, x = 30.0}
+  , Leaf {id = 7, x = 35.0}
+  , Leaf {id = 8, x = 40.0}
+  , Leaf {id = 9, x = 45.0}
   ]
 
 recursive let minId = lam t. switch t
@@ -1575,6 +1583,9 @@ let result =
   let run = lam.
     infer (SimplePValGraph {run = simplePValGraphMCMC {globalProb = globalProb, iterations = iterations}}) baseline2 in
   summarizeBaseline "baseline2 simple-pval-graph" (timeF run);
+  let run = lam.
+    infer (SimplePValGraph {experiment = 1, run = simplePValGraphMCMC {globalProb = globalProb, iterations = iterations}}) baseline2 in
+  summarizeBaseline "baseline2 simple-pval-graph experiment" (timeF run);
   let run = lam.
     infer (SimplePValGraph {debugOutput = "build/baseline2-simple.json", run = simplePValGraphMCMC {globalProb = globalProb, iterations = iterations}}) baseline2 in
   summarizeBaseline "baseline2 simple-pval-graph json" (timeF run);

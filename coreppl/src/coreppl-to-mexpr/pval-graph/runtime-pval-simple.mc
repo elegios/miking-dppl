@@ -3,6 +3,7 @@ include "../runtime-dists.mc"
 
 include "./config.mc"
 include "./pval-mut.mc"
+include "./pval-deep.mc"
 include "./pval-debug.mc"
 
 lang SimplePValGraphBase = PValInterface + RuntimeDist
@@ -18,9 +19,31 @@ lang SimplePValGraphBase = PValInterface + RuntimeDist
   sem simpleStoreWeight st = | _ -> st
 
   sem reexportMapAccumL = | f -> mapAccumL f
+
+  sem mkInterface : all ret. (PValState [PSomeAssumeRef] -> PValState ([PSomeAssumeRef], PExportRef ret)) -> SimplePValInterface (PValInstance Complete ([PSomeAssumeRef], PExportRef ret)) ret
+  sem mkInterface = | f ->
+    { instantiate = lam.
+      let instance = instantiate (p_prepare f []) in
+      {instance = instance, numAligned = length (getSt instance).0}
+    , getWeight = getWeight
+    , getRet = lam instance.
+      readPreviousExport (getSt instance).1 instance
+    , step = lam predicate. lam toResample. lam instance.
+      (if null toResample then error "Inference error: SimplePVal got a resample step with no resampling." else ());
+      let assumes = (getSt instance).0 in
+      let instance = startStep instance in
+      let instance = foldl
+        (lam instance. lam idx. resampleSomeAssume (get assumes idx) instance)
+        instance toResample in
+      match finalizeStep predicate instance with (accept, instance) in
+      {accept = accept, instance = instance}
+    }
 end
 
 lang SimplePValGraph = SimplePValGraphBase + MutPVal
+end
+
+lang DeepPValGraph = SimplePValGraphBase + DeepPVal + MutRefArena
 end
 
 lang DebugSimplePValGraph = SimplePValGraphBase + PValVisiGraph
@@ -37,29 +60,16 @@ let run
 
     if not (null config.debugOutput) then
       use DebugSimplePValGraph in
-      let instance = instantiate f [] in
+      let instance = instantiate (p_prepare f []) in
       let json = graphToJson instance in
       writeFile config.debugOutput (json2string json);
       constructDistEmpirical [] [] (EmpMCMC {acceptRate = 0.0})
     else
 
-    let interface : SimplePValInterface (PValInstance Complete ([PSomeAssumeRef], PExportRef ret)) ret =
-      { instantiate = lam.
-        let instance = instantiate f [] in
-        {instance = instance, numAligned = length (getSt instance).0}
-      , getWeight = getWeight
-      , getRet = lam instance.
-        readPreviousExport (getSt instance).1 instance
-      , step = lam predicate. lam toResample. lam instance.
-        (if null toResample then error "Inference error: SimplePVal got a resample step with no resampling." else ());
-        let assumes = (getSt instance).0 in
-        let instance = startStep instance in
-        let instance = foldl
-          (lam instance. lam idx. resampleSomeAssume (get assumes idx) instance)
-          instance toResample in
-        match finalizeStep predicate instance with (accept, instance) in
-        {accept = accept, instance = instance}
-      } in
+    let interface = switch config.experiment
+      case 0 then use SimplePValGraph in mkInterface f
+      case 1 then use DeepPValGraph in mkInterface f
+      end in
 
     let startTime = wallTimeMs () in
     let res = config.run interface in

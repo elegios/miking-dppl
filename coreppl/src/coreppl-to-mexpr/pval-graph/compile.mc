@@ -148,7 +148,10 @@ lang SimplePValGraphCompiler
     -- in the TODO above with the same date.
 
     let getPValVar = if null config.debugOutput
-      then lam str. appFromEnv x.runtime (concat "vSimplePValGraph_" str) []
+      then switch config.experiment
+        case 0 then lam str. appFromEnv x.runtime (concat "vSimplePValGraph_" str) []
+        case 1 then lam str. appFromEnv x.runtime (concat "vDeepPValGraph_" str) []
+        end
       else lam str. appFromEnv x.runtime (concat "vDebugSimplePValGraph_" str) [] in
     let initTransEnv =
       { currStateName = x.stateName
