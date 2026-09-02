@@ -259,6 +259,7 @@ lang IdealizedPValTransformation = Dist + Assume + Weight + Observe + TempLamAst
 
   type PScope =
     { functionDefinitions : Map Name {fName : Name, params : [Name], mayBeRecursive : Bool, body : Expr, depth : Int}
+    , nonProbFunctions : Map Name (Name, Type)
     , depth : Int
     , valueScope : Map Name (Name, PType)    -- Type is type of *rhs* name
     , revValueScope : Map Name (Name, PType) -- Type is type of *lhs* name
@@ -467,8 +468,9 @@ lang IdealizedPValTransformation = Dist + Assume + Weight + Observe + TempLamAst
 
   sem _adjustWrapping : (PType, PType) -> Expr -> Expr
   sem _adjustWrapping =
-  | (PNever _, PNever _) | (PNever (PUnknown _), _) -> lam x. x
-  | (PNever !(PUnknown _), PHere {wrapped = Wrapped _}) -> app_ (uconst_ (CPPure ()))
+  | (PNever _, PNever _) -> lam x. x
+  | (PNever (PUnknown _), PLater _) -> lam x. x
+  | (PNever _, PHere {wrapped = Wrapped _}) -> app_ (uconst_ (CPPure ()))
   | (PHere {wrapped = Unused _}, _) -> lam x. x
   | (PHere {wrapped = Wrapped _}, PHere {wrapped = Wrapped _}) -> lam x. x
   | (PHere {wrapped = Wrapped _}, PLater _) -> lam tm. errorSingle [infoTm tm] "Tried to convert a value to a less wrapped value, which is impossible"
@@ -575,14 +577,15 @@ lang IdealizedPValTransformation = Dist + Assume + Weight + Observe + TempLamAst
     else error "_switchExhaustive was called with a non-covered case"
   | tm ->
     if mapIsEmpty cases then tm else
+    let targetTy = tyTm tm in
     match
       match (mapSize cases, tm) with (1, _) | (_, TmVar _) then (lam x. x, tm) else
       let n = nameSym "target" in
-      (bind_ (nulet_ n tm), nvar_ n)
+      (bind_ (nulet_ n tm), withType targetTy (nvar_ n))
     with (oBind, target) in
     let f = lam acc. lam conName. lam f.
       let n = nameSym "x" in
-      match_ target (npcon_ conName (npvar_ n))
+      match_ target (withTypePat targetTy (npcon_ conName (npvar_ n)))
         (f (nvar_ n))
         acc in
     oBind (mapFoldWithKey f never_ cases)
@@ -710,10 +713,25 @@ lang IdealizedPValTransformation = Dist + Assume + Weight + Observe + TempLamAst
       then (definition.fName, Some definition)
       else (x.ident, None ())
     with (ident, definition) in
-    match optionBind (mapLookup ident st.specializations) (mapLookup (map (lam x. x.1) args)) with Some {ident = name, ty = ty} then
+    let spec = optionBind (mapLookup ident st.specializations) (mapLookup (map (lam x. x.1) args)) in
+    match spec with Some {ident = name, ty = ty} then
       (st, (appSeq_ (nvar_ name) (map (lam x. x.0) args), ty))
-    else match definition with Some definition
-    then _specializeCall sc st f args retTy (SCKDefFlexible definition)
+    else match definition with Some definition then
+      match _specializeCall sc st f args retTy (SCKDefFlexible definition) with ret & (_, (_, pty)) in
+      if isTopWrapped pty then
+        -- NOTE(vipa, 2026-06-23): Pervasive transformation gives a
+        -- completely probabilistic return, see if we can go via a
+        -- non-probabilistic version instead, to minimize the number
+        -- of nodes in the graph
+        match mapLookup x.ident sc.nonProbFunctions with Some (n, ty) then
+          -- OPT(vipa, 2026-06-23): Insert a specialization for this,
+          -- to not have to redo the previous specialization over and
+          -- over
+          match ty with TyAll _
+          then _specializeCall sc st (nvar_ n) args retTy (SCKPolyFlexible ty)
+          else _specializeCall sc st (nvar_ n) args retTy (SCKInflexible ())
+        else ret
+      else ret
     else _specializeCall sc st f args retTy (SCKInflexible ())
   | {f = f & TmConst {val = c}, args = args, ret = retTy} ->
     match tyConst c with ty & TyAll _
@@ -960,27 +978,83 @@ lang IdealizedPValTransformation = Dist + Assume + Weight + Observe + TempLamAst
     , {st with specializations = mapInsert x.ident spec st.specializations}
     )
 
+  sem _asNonProbBody : PScope -> Expr -> Option Expr
+  sem _asNonProbBody sc =
+  | TmAssume _ | TmObserve _ | TmWeight _ -> None ()
+  | TmVar x ->
+    match mapLookup x.ident sc.functionDefinitions with Some _ then None () else
+    match mapLookup x.ident sc.nonProbFunctions with Some (n, _) then Some (TmVar {x with ident = n}) else
+    match mapLookup x.ident sc.valueScope with Some (n, _) then Some (TmVar {x with ident = n}) else
+    Some (TmVar x)
+  | TmOpaque x ->
+    match _asNonProbBody sc x.body with Some body
+    then Some (TmOpaque {x with body = body})
+    else None ()
+  | tm ->
+    let smapMOption : (Expr -> Option Expr) -> Expr -> Option Expr = lam f. lam tm.
+      let f = lam acc. lam tm. if acc
+        then match f tm with Some tm
+          then (true, tm)
+          else (false, tm)
+        else (acc, tm) in
+      match smapAccumL_Expr_Expr f true tm with (true, tm)
+      then Some tm
+      else None () in
+    smapMOption (_asNonProbBody sc) tm
+
+  sem _prepLambdaBinding : PScope -> Name -> Bool -> DeclLetRecord -> ((PScope, PState) -> (PScope, PState), Option ((PScope, PState) -> (PScope, PState)))
+  sem _prepLambdaBinding sc n mayBeRecursive = | x ->
+    -- NOTE(vipa, 2026-06-22): This strongly assumes that there are no
+    -- free variables that might be wrapped in any way. That holds as
+    -- long as lambda lifting has been done, which we also generally
+    -- assume throughout the transformation.
+    recursive let work = lam wrap. lam params. lam tm.
+      match tm with TmLam x
+      then work (lam tm. wrap (TmLam {x with body = tm})) (snoc params x.ident) x.body
+      else (wrap, params, tm) in
+    match work (lam tm. tm) [] x.body with (wrap, params, body) in
+    let asDef = lam pair.
+      let def = {fName = x.ident, params = params, mayBeRecursive = mayBeRecursive, body = body, depth = sc.depth} in
+      ({pair.0 with functionDefinitions = mapInsert x.ident def (pair.0).functionDefinitions}, pair.1) in
+    match _asNonProbBody sc body with Some body then
+      let asNonProb = lam pair.
+        let spec = mapSingleton (seqCmp ptyCmp) []
+          { ident = n
+          , ty = PNever (PUnknown ())
+          , decl = Some {x with ident = n, body = wrap body}
+          , depth = sc.depth
+          } in
+        asDef
+        ( {pair.0 with nonProbFunctions = mapInsert x.ident (n, unwrapType x.tyBody) (pair.0).nonProbFunctions}
+        , {pair.1 with specializations = mapInsert x.ident spec (pair.1).specializations}
+        ) in
+      (asDef, Some asNonProb)
+    else (asDef, None ())
+
   sem specializeDeclPre : PScope -> PState -> Decl -> (PScope, PState)
   sem specializeDeclPre sc st =
   | DeclLet x -> _defaultLetSpecialization sc st x
   | DeclLet (x & {ident = ident, body = body & TmVar {ident = vIdent}}) ->
     match mapLookup vIdent sc.functionDefinitions with Some def
     then ({sc with functionDefinitions = mapInsert ident def sc.functionDefinitions}, st)
+    else match mapLookup vIdent sc.nonProbFunctions with Some def
+    then ({sc with nonProbFunctions = mapInsert ident def sc.nonProbFunctions}, st)
     else _defaultLetSpecialization sc st x
-  | DeclLet {ident = ident, body = body & TmLam _} ->
-    recursive let work = lam params. lam tm.
-      match tm with TmLam x
-      then work (snoc params x.ident) x.body
-      else {fName = ident, params = params, mayBeRecursive = false, body = tm, depth = sc.depth} in
-    ({sc with functionDefinitions = mapInsert ident (work [] body) sc.functionDefinitions}, st)
+  | DeclLet (x & {ident = ident, body = body & TmLam _}) ->
+    let res = _prepLambdaBinding sc (nameSetNewSym ident) false x in
+    optionGetOr res.0 res.1 (sc, st)
   | DeclRecLets x ->
-    recursive let work = lam fName. lam params. lam tm.
-      match tm with TmLam x
-      then work fName (snoc params x.ident) x.body
-      else {fName = fName, params = params, mayBeRecursive = true, body = tm, depth = sc.depth} in
-    let f = lam definitions. lam decl.
-      mapInsert decl.ident (work decl.ident [] decl.body) definitions in
-    ({sc with functionDefinitions = foldl f sc.functionDefinitions x.bindings}, st)
+    let addNonProb = lam acc. lam binding.
+      match acc with (sc, fs) in
+      let n = nameSetNewSym binding.ident in
+      ( {sc with nonProbFunctions = mapInsert binding.ident (n, binding.tyBody) sc.nonProbFunctions}
+      , snoc fs (lam sc. _prepLambdaBinding sc n true binding)
+      ) in
+    match foldl addNonProb (sc, []) x.bindings with (tempSc, fs) in
+    match unzip (map (lam f. f tempSc) fs) with (asDefs, asNonProbs) in
+    match optionMapM (lam x. x) asNonProbs with Some asNonProbs
+    then foldl (lam acc. lam f. f acc) (tempSc, st) asNonProbs
+    else foldl (lam acc. lam f. f acc) (sc, st) asDefs
   | DeclExt x ->
     match unwrapType x.tyIdent with !(TyArrow _ | TyAll _)
     then (addBinding x.ident (x.ident, tyToPurePType sc x.tyIdent) sc, st)
@@ -1503,6 +1577,7 @@ let transform = lam strs.
     } in
   let initScope =
     { functionDefinitions = mapEmpty nameCmp
+    , nonProbFunctions = mapEmpty nameCmp
     , valueScope = mapEmpty nameCmp
     , revValueScope = mapEmpty nameCmp
     , conScope = mapEmpty nameCmp
@@ -1604,13 +1679,11 @@ with strJoin "\n"
   [ "let f = lam a1."
   , "    addf a1 1. in"
   , "let f1 = lam a."
-  , "    px_map (/-temp-/lam x1."
-  , "         addf x1 1.) a"
-  , "in"
+  , "    addf a 1. in"
   , "px_map"
   , "  (/-temp-/lam x."
-  , "     addf (f 1.) x)"
-  , "  (f1 (px_assume (px_pure (Gaussian 0. 1.))))"
+  , "     addf (f1 1.) (f x))"
+  , "  (px_assume (px_pure (Gaussian 0. 1.)))"
   ]
 using eqString
 else printFailure
@@ -2157,51 +2230,67 @@ with strJoin "\n"
   , "recursive"
   , "  let cluster ="
   , "    lam trees."
-  , "      match trees with Cons tmp"
-  , "      in"
-  , "      match tmp with (tree, rest)"
-  , "      in"
-  , "      match rest with Cons tmp1"
+  , "      match trees with Cons carried"
   , "      then"
-  , "        match tmp1 with (r, trees1)"
+  , "        match carried with (field, field1)"
   , "        in"
-  , "        cluster1"
-  , "          (Cons"
-  , "             (Node"
-  , "               { x = px_assume (px_pure (Gaussian 0. 1.)),"
-  , "                 left = tree,"
-  , "                 right = r }, trees1))"
+  , "        match field1 with Cons carried1"
+  , "        then"
+  , "          match carried1 with (field2, field3)"
+  , "          in"
+  , "          cluster1"
+  , "            (Cons"
+  , "               (Node"
+  , "                 { x = px_assume (px_pure (Gaussian 0. 1.)),"
+  , "                   left = field,"
+  , "                   right = field2 }, field3))"
+  , "        else"
+  , "          field"
   , "      else"
-  , "        tree"
+  , "        (print"
+  , "             (snoc"
+  , "                (concat \"ERROR <internal 8:2-14:11>:\\nUnmatched pattern: \" \"Nil _\")"
+  , "                '\\n'))"
+  , "        ; exit 1"
   , "  let cluster1 ="
-  , "    lam trees2."
-  , "      match trees2 with Cons tmp2"
-  , "      in"
-  , "      match tmp2 with (tree1, rest1)"
-  , "      in"
-  , "      match rest1 with Cons tmp3"
+  , "    lam trees1."
+  , "      match trees1 with Cons carried2"
   , "      then"
-  , "        match tmp3 with (r1, trees3)"
+  , "        match carried2 with (field4, field5)"
   , "        in"
-  , "        cluster1"
-  , "          (Cons"
-  , "             (Node"
-  , "               { x = px_assume (px_pure (Gaussian 0. 1.)),"
-  , "                 left = tree1,"
-  , "                 right = r1 }, trees3))"
+  , "        match field5 with Cons carried3"
+  , "        then"
+  , "          match carried3 with (field6, field7)"
+  , "          in"
+  , "          cluster1"
+  , "            (Cons"
+  , "               (Node"
+  , "                 { x = px_assume (px_pure (Gaussian 0. 1.)),"
+  , "                   left = field4,"
+  , "                   right = field6 }, field7))"
+  , "        else"
+  , "          field4"
   , "      else"
-  , "        tree1"
+  , "        let #var\"1\" ="
+  , "          print"
+  , "            (snoc"
+  , "               (concat \"ERROR <internal 8:2-14:11>:\\nUnmatched pattern: \" \"Nil _\")"
+  , "               '\\n')"
+  , "        in"
+  , "        exit 1"
   , "in"
-  , "(cluster"
-  , "     (Cons"
-  , "        (Leaf"
-  , "          { x = 0. }, Cons"
-  , "          (Leaf"
-  , "            { x = 1. }, Cons"
-  , "            (Leaf"
-  , "              { x = 2. }, Nil"
-  , "              {})))))"
-  , "; {}"
+  , "let #var\"2\" ="
+  , "  cluster"
+  , "    (Cons"
+  , "       (Leaf"
+  , "         { x = 0. }, Cons"
+  , "         (Leaf"
+  , "           { x = 1. }, Cons"
+  , "           (Leaf"
+  , "             { x = 2. }, Nil"
+  , "             {}))))"
+  , "in"
+  , "{}"
   ]
 using eqString
 else printFailure
@@ -2237,8 +2326,20 @@ with strJoin "\n"
   , "                  right = get trees 1 })"
   , "             (splitAt trees 2).1)"
   , "      else match trees with [ e ]"
-  , "      in"
-  , "      e"
+  , "      then"
+  , "        e"
+  , "      else"
+  , "        (print"
+  , "             (snoc"
+  , "                (concat"
+  , "                   \"ERROR <internal 6:2-7:41>:\\nUnmatched pattern: \""
+  , "                   (match length trees with 0"
+  , "                    then"
+  , "                      \"[]\""
+  , "                    else"
+  , "                      \"[_, _, _] ++ _\"))"
+  , "                '\\n'))"
+  , "        ; exit 1"
   , "  let cluster1 ="
   , "    lam trees1."
   , "      match trees1 with [ _,"
@@ -2252,8 +2353,22 @@ with strJoin "\n"
   , "                  right = get trees1 1 })"
   , "             (splitAt trees1 2).1)"
   , "      else match trees1 with [ e1 ]"
-  , "      in"
-  , "      e1"
+  , "      then"
+  , "        e1"
+  , "      else"
+  , "        let #var\"1\" ="
+  , "          print"
+  , "            (snoc"
+  , "               (concat"
+  , "                  \"ERROR <internal 6:2-7:41>:\\nUnmatched pattern: \""
+  , "                  (match length trees1 with 0"
+  , "                   then"
+  , "                     \"[]\""
+  , "                   else"
+  , "                     \"[_, _, _] ++ _\"))"
+  , "               '\\n')"
+  , "        in"
+  , "        exit 1"
   , "in"
   , "cluster"
   , "  [ Leaf"
@@ -2286,8 +2401,14 @@ with strJoin "\n"
   , "           { x = 1. } ])"
   , "with"
   , "  Leaf carried"
-  , "in"
-  , "addf carried.x 1."
+  , "then"
+  , "  addf carried.x 1."
+  , "else"
+  , "  (print"
+  , "       (snoc"
+  , "          (concat \"ERROR <internal 4:0-5:12>:\\nUnmatched pattern: \" \"Node _\")"
+  , "          '\\n'))"
+  , "  ; exit 1"
   ]
 using eqString
 else printFailure
@@ -2315,9 +2436,15 @@ with strJoin "\n"
   , "           { x = px_pure 1. } ])"
   , "with"
   , "  Leaf carried"
-  , "in"
-  , "px_map (/-temp-/lam x."
-  , "     addf x 1.) carried.x"
+  , "then"
+  , "  px_map (/-temp-/lam x."
+  , "       addf x 1.) carried.x"
+  , "else"
+  , "  (print"
+  , "       (snoc"
+  , "          (concat \"ERROR <internal 5:0-6:12>:\\nUnmatched pattern: \" \"Node _\")"
+  , "          '\\n'))"
+  , "  ; px_pure (exit 1)"
   ]
 using eqString
 else printFailure
@@ -2345,9 +2472,15 @@ with strJoin "\n"
   , "           { x = px_assume (px_pure (Gaussian 0. 1.)) } ])"
   , "with"
   , "  Leaf carried"
-  , "in"
-  , "px_map (/-temp-/lam x."
-  , "     addf x 1.) carried.x"
+  , "then"
+  , "  px_map (/-temp-/lam x."
+  , "       addf x 1.) carried.x"
+  , "else"
+  , "  (print"
+  , "       (snoc"
+  , "          (concat \"ERROR <internal 5:0-6:12>:\\nUnmatched pattern: \" \"Node _\")"
+  , "          '\\n'))"
+  , "  ; px_pure (exit 1)"
   ]
 using eqString
 else printFailure
@@ -2379,8 +2512,6 @@ with strJoin "\n"
   , "recursive"
   , "  let cluster ="
   , "    lam trees."
-  , "      let matchBody = lam #var\"\"."
-  , "          never in"
   , "      match trees with Cons carried"
   , "      then"
   , "        match carried with (field, field1)"
@@ -2399,13 +2530,23 @@ with strJoin "\n"
   , "                   left = field,"
   , "                   right = field2 }, field3))"
   , "        else"
-  , "          matchBody {}"
+  , "          (print"
+  , "               (snoc"
+  , "                  (concat"
+  , "                     \"ERROR <internal 9:2-10:41>:\\nUnmatched pattern: \""
+  , "                     \"Cons (_, !_)\")"
+  , "                  '\\n'))"
+  , "          ; exit 1"
   , "      else"
-  , "        matchBody {}"
+  , "        let #var\"1\" ="
+  , "          print"
+  , "            (snoc"
+  , "               (concat \"ERROR <internal 9:2-10:41>:\\nUnmatched pattern: \" \"Nil _\")"
+  , "               '\\n')"
+  , "        in"
+  , "        exit 1"
   , "  let cluster1 ="
   , "    lam trees1."
-  , "      let matchBody1 = lam #var\"1\"."
-  , "          never in"
   , "      match trees1 with Cons carried3"
   , "      then"
   , "        match carried3 with (field4, field5)"
@@ -2424,11 +2565,25 @@ with strJoin "\n"
   , "                   left = field4,"
   , "                   right = field6 }, field7))"
   , "        else"
-  , "          matchBody1 {}"
+  , "          let #var\"2\" ="
+  , "            print"
+  , "              (snoc"
+  , "                 (concat"
+  , "                    \"ERROR <internal 9:2-10:41>:\\nUnmatched pattern: \""
+  , "                    \"Cons (_, !_)\")"
+  , "                 '\\n')"
+  , "          in"
+  , "          exit 1"
   , "      else"
-  , "        matchBody1 {}"
+  , "        let #var\"3\" ="
+  , "          print"
+  , "            (snoc"
+  , "               (concat \"ERROR <internal 9:2-10:41>:\\nUnmatched pattern: \" \"Nil _\")"
+  , "               '\\n')"
+  , "        in"
+  , "        exit 1"
   , "in"
-  , "let #var\"2\" ="
+  , "let #var\"4\" ="
   , "  cluster"
   , "    (Cons"
   , "       (Leaf"
@@ -2469,8 +2624,16 @@ with strJoin "\n"
   , "     then"
   , "       2"
   , "     else match x1 with 3"
-  , "     in"
-  , "     3)"
+  , "     then"
+  , "       3"
+  , "     else"
+  , "       (print"
+  , "            (snoc"
+  , "               (concat"
+  , "                  \"ERROR <internal 6:0-6:3>:\\nUnmatched pattern: \""
+  , "                  \"!(0 | 1 | 2 | 3)\")"
+  , "               '\\n'))"
+  , "       ; exit 1)"
   , "  #var\"X\""
   ]
 using eqString
@@ -2494,9 +2657,9 @@ with strJoin "\n"
   , "       else"
   , "         (2, 3)"
   , "     with"
-  , "       (a, b)"
+  , "       (field, field1)"
   , "     in"
-  , "     addi a b)"
+  , "     addi field field1)"
   , "  (px_assume (px_pure (Bernoulli 0.5)))"
   ]
 using eqString
@@ -2522,11 +2685,11 @@ with strJoin "\n"
   , "          else"
   , "            (2, 3)"
   , "        with"
-  , "          (a, _)"
+  , "          (field, field1)"
   , "        in"
   , "        px_map"
   , "          (/-temp-/lam x3."
-  , "             addi a x3)"
+  , "             addi field x3)"
   , "          (px_assume (px_pure (Categorical [ 0.5, 0.5 ]))))"
   , "     (px_assume (px_pure (Bernoulli 0.5))))"
   ]

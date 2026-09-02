@@ -1,6 +1,7 @@
 include "mexpr/phase-stats.mc"
 include "mexpr/inline-single-use-simple.mc"
 include "mexpr/lamlift.mc"
+include "mexpr/demote-recursive.mc"
 include "../dists.mc"
 include "../../inference/pval-graph.mc"
 
@@ -13,7 +14,7 @@ lang SimplePValGraphCompiler
   = SimplePValGraphMethod + PhaseStats + InferenceInterface
   + LowerNestedPatterns + InlineSingleUse + RemoveSecondClassFunctions
   + IdealizedPValTransformation + PValStateTransformation + EtaExpansion
-  + TransformDist + MExprLambdaLift
+  + TransformDist + MExprLambdaLift + MExprDemoteRecursive
 
   sem pickRuntime = | SimplePValGraph _ -> ("pval-graph/runtime-pval-simple.mc", mapEmpty cmpString)
   sem pickCompiler = | SimplePValGraph x -> compileSimplePValGraph x
@@ -95,6 +96,9 @@ lang SimplePValGraphCompiler
     let ast = stripTempLam (remSecLamExpr initEnv initState ast).1 in
     endPhaseStatsExpr log "remove-second-class-lambdas-one" ast;
 
+    let ast = demoteRecursive ast in
+    endPhaseStatsExpr log "demote-recursive-one" ast;
+
     let freeVariables = freeVars ast in
     let freeVariables : Map Name Type =
       recursive let work = lam acc. lam tm.
@@ -130,11 +134,15 @@ lang SimplePValGraphCompiler
     let ast = removeMetaVarExpr (typeCheckDeclIgnoreEscape tyEnv ast) in
     endPhaseStatsExpr log "typecheck-one" ast;
 
+    -- TODO(vipa, 2026-05-26): This is the end of the block mentioned
+    -- in the TODO above with the same date.
+
     let initState =
       { specializations = mapEmpty nameCmp
       } in
     let initScope =
       { functionDefinitions = mapEmpty nameCmp
+      , nonProbFunctions = mapEmpty nameCmp
       , depth = 0
       , valueScope = mapEmpty nameCmp
       , revValueScope = mapEmpty nameCmp
@@ -144,10 +152,18 @@ lang SimplePValGraphCompiler
     let ast = stripTempLam (specializeExprReturn initScope initState freeVariables ast) in
     endPhaseStatsExpr log "idealized-transformation-one" ast;
 
-    -- TODO(vipa, 2026-05-26): This is the end of the block mentioned
-    -- in the TODO above with the same date.
+    (if null config.debugIdealized then () else
+      recursive let promoteInferred = lam tm.
+        let tm = match tm with TmDecl (x & {decl = DeclLet y})
+          then TmDecl {x with decl = DeclLet {y with tyAnnot = y.tyBody}}
+          else tm in
+        match tm with TmOpaque _ then tm else smap_Expr_Expr promoteInferred tm in
+      writeFile config.debugIdealized (expr2str (promoteInferred ast))
+    );
 
-    let getPValVar = lam str. appFromEnv x.runtime (concat "vSimplePValGraph_" str) [] in
+    let getPValVar = if null config.debugOutput
+      then lam str. appFromEnv x.runtime (concat "vSimplePValGraph_" str) []
+      else lam str. appFromEnv x.runtime (concat "vDebugSimplePValGraph_" str) [] in
     let initTransEnv =
       { currStateName = x.stateName
       , functions = mapEmpty nameCmp
