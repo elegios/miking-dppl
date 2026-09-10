@@ -361,7 +361,7 @@ let run : all acc. all dAcc. Config Result acc dAcc -> (State Result -> Result) 
         -- print "prevWeightReused: "; printLn (float2string prevWeightReused);
         -- printLn "-----";
         match
-          if bernoulliSample (exp logMhAcceptProb) then
+          if mhAccept logMhAcceptProb then
             mcmcAccept ();
             (true, proposalWeight, priorWeight, sample)
           else

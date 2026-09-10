@@ -21,11 +21,16 @@ let t = testCpplMExpr "diversification-models/clads2-synthetic.mc" in
 -- NOTE(2023-06-30,dlunde): SMC with '--resample likelihood' peforms really
 -- poorly for this model, which is why we simply give lam. lam. true as the
 -- test equality function.
-utest r (t 1000 0 "-m is-lw --cps none"                            ) with rhs using en in
-utest r (t 1000 0 "-m is-lw --cps partial"                         ) with rhs using en in
-utest r (t 1000 0 "-m is-lw --cps partial --no-early-stop"         ) with rhs using en in
-utest r (t 1000 0 "-m is-lw --cps full"                            ) with rhs using en in
-utest r (t 1000 0 "-m is-lw --cps full --no-early-stop"            ) with rhs using en in
+-- NOTE: As in crbd.mc -- at 1000 particles the normalising constant has a
+-- seed-to-seed sd of 1.82 against the 2.0 tolerance, so whether this passes
+-- is decided by the RNG stream rather than by correctness. At 20000 it is
+-- mean -15.6155, sd 0.238 against a truth of -15.4824, i.e. ~8 sd of
+-- headroom.
+utest r (t 20000 0 "-m is-lw --cps none"                           ) with rhs using en in
+utest r (t 20000 0 "-m is-lw --cps partial"                         ) with rhs using en in
+utest r (t 20000 0 "-m is-lw --cps partial --no-early-stop"         ) with rhs using en in
+utest r (t 20000 0 "-m is-lw --cps full"                            ) with rhs using en in
+utest r (t 20000 0 "-m is-lw --cps full --no-early-stop"            ) with rhs using en in
 -- utest r (t 1000 0 "-m smc-bpf --cps partial --resample manual"     ) with rhs using en in
 utest r (t 1000 0 "-m smc-bpf --cps partial --resample align"      ) with rhs using en in
 utest r (t 1000 0 "-m smc-bpf --cps partial --resample likelihood" ) with rhs using lam. lam. true in

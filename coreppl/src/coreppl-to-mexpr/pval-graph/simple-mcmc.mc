@@ -19,7 +19,15 @@ lang MCMCPVal = PValInterface
 
   sem mcmc : all st. all a. MCMCConfig st a -> PValInstance Complete st -> MCMCResult st a
   sem mcmc config = | instance ->
-    let acceptPred = lam prob. bernoulliSample (exp prob) in
+    let acceptPred = lam prob.
+    -- NOTE: `prob` is a log acceptance ratio and is NaN when the proposed and
+    -- the current execution are both impossible (`-inf - -inf`). owl's
+    -- binomial_rvs took the resulting NaN probability without complaint and
+    -- returned 0, i.e. reject; the validating replacement raises. Reject
+    -- explicitly -- same behaviour, now deliberate. (mhAccept in
+    -- runtime-common.mc does the same for the non-graph runtimes; this file
+    -- does not include it.)
+    if neqf prob prob then false else bernoulliSample (exp prob) in
     recursive let work = lam acc.
       if eqi acc.iterations 0 then acc else
       match finalizeStep acceptPred (config.step (startStep acc.instance)) with (accepted, instance) in

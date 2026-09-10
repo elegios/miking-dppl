@@ -21,11 +21,17 @@ let t = testCpplMExpr "diversification-models/crbd-synthetic.mc" in
 -- NOTE(2023-06-30,dlunde): SMC with '--resample likelihood' peforms really
 -- poorly for this model, which is why we simply give lam. lam. true as the
 -- test equality function.
-utest r (t 1000 0 "-m is-lw --cps none"                            ) with rhs using en in
-utest r (t 1000 0 "-m is-lw --cps partial"                         ) with rhs using en in
-utest r (t 1000 0 "-m is-lw --cps partial --no-early-stop"         ) with rhs using en in
-utest r (t 1000 0 "-m is-lw --cps full"                            ) with rhs using en in
-utest r (t 1000 0 "-m is-lw --cps full --no-early-stop"            ) with rhs using en in
+-- NOTE: The importance-sampling configurations ran 1000 particles, where the
+-- normalising-constant estimate has a seed-to-seed sd of 1.33 against the
+-- 2.0 tolerance -- close enough to the edge that owl's stream passed and the
+-- replacement's missed by 0.06. At 20000 the estimate converges on the
+-- recorded value (mean -16.158, sd 0.37, against a truth of -16.067), giving
+-- ~5 sd of headroom for 0.11 s a run.
+utest r (t 20000 0 "-m is-lw --cps none"                           ) with rhs using en in
+utest r (t 20000 0 "-m is-lw --cps partial"                         ) with rhs using en in
+utest r (t 20000 0 "-m is-lw --cps partial --no-early-stop"         ) with rhs using en in
+utest r (t 20000 0 "-m is-lw --cps full"                            ) with rhs using en in
+utest r (t 20000 0 "-m is-lw --cps full --no-early-stop"            ) with rhs using en in
 -- utest r (t 1000 0 "-m smc-bpf --cps partial --resample manual"     ) with rhs using en in
 utest r (t 1000 0 "-m smc-bpf --cps partial --resample align"      ) with rhs using en in
 utest r (t 1000 0 "-m smc-bpf --cps partial --resample likelihood" ) with rhs using lam. lam. true in

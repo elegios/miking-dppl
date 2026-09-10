@@ -68,6 +68,24 @@ let printStatistics = lam res. lam names. lam normConst. lam expVals. lam varian
     print "\n";
     print (join ["Normalization constant: ", float2string normConst, "\n"])
 
+-- exp(w - maxw) for a particle weight, guarding the all-impossible case.
+--
+-- NOTE: When every particle has weight -inf the maximum is -inf too, so
+-- `subf w maxw` is the undefined `-inf - -inf` and the exponentiated weights,
+-- their sum and the ESS all become NaN. That NaN reached
+-- `uniformContinuousSample 0. (divf NaN n)` in systematicSample below: owl's
+-- uniform_rvs returned NaN, after which systematicSampleRec's `ltf u ...`
+-- was false at every step and it silently discarded the entire particle set.
+-- The validating replacement raises instead, which is how this was found --
+-- treeppl's subroot-HRM model hit it in about a third of unseeded runs.
+--
+-- Treat "no information" as uniform weights. The ESS is then the full
+-- particle count, so callers that test it skip resampling and simply
+-- propagate, which is the only defensible reading of a population in which
+-- every particle is impossible.
+let expWeightRel : Float -> Float -> Float = lam maxw. lam w.
+  if eqf maxw (negf inf) then 1. else exp (subf w maxw)
+
 -- Systematic sampling
 let systematicSample: all a. [a] -> [Float] -> Float -> Int -> [a] = lam seq. lam weights. lam weightSum. lam sampleCount.
   let step = divf weightSum (int2float sampleCount) in
@@ -130,6 +148,24 @@ let output = lam res: [[Float]]. lam names: [String].
   let varianceVals = variance res expVals in
   printStatistics res names nc expVals varianceVals;
   saveCSV res names "data.csv" expOnLogWeights
+
+-- The Metropolis-Hastings accept/reject draw.
+--
+-- NOTE: `logMhAcceptProb` is NaN whenever the proposed execution and the one
+-- it is compared against are *both* impossible, since the weights are then
+-- both -inf and `subf weight prevWeight` is the undefined `-inf - -inf`.
+-- `coreppl/models/sprinkler.mc` reaches this via `observe true (Bernoulli
+-- 0.0)`. Passing that NaN to `bernoulliSample` used to be silently harmless
+-- because owl's `binomial_rvs` validated nothing and returned 0, i.e.
+-- reject; the validating replacement raises `Invalid_argument` instead. So
+-- reject explicitly. That is both what happened before and the defensible
+-- answer: with no probability mass on either side there is nothing to accept
+-- on. Only this case is affected -- a finite proposal against an impossible
+-- predecessor still gives `+inf`, hence `minf 0.` and certain acceptance.
+let mhAccept : Float -> Bool = lam logMhAcceptProb.
+  -- No isNaN in the stdlib; NaN is the only value not equal to itself.
+  if neqf logMhAcceptProb logMhAcceptProb then false
+  else bernoulliSample (exp logMhAcceptProb)
 
 -- MCMC acceptance rate
 let _mcmcAccepts = ref 0

@@ -60,7 +60,7 @@ let run : all a. all b. Unknown
       unzip (mapReverse (lam p. (p.weight, match p.checkpoint with End a in a)) particles)
     else
       let maxWeight = foldl (lam acc. lam p. if geqf p.weight acc then p.weight else acc) (negf inf) particles in
-      let expWeights = reverse (mapReverse (lam p. exp (subf p.weight maxWeight)) particles) in
+      let expWeights = reverse (mapReverse (lam p. expWeightRel maxWeight p.weight) particles) in
       let sums = foldl (lam acc. lam w. (addf acc.0 w, addf acc.1 (mulf w w))) (0., 0.) expWeights in
       let ess = divf (mulf sums.0 sums.0) sums.1 in
       if ltf (mulf resampleFrac (int2float particleCount)) ess then

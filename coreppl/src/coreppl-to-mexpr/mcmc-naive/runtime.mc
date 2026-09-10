@@ -30,7 +30,7 @@ let run : all a. Unknown -> (State -> a) -> use RuntimeDistBase in Dist a =
         let prevSample: a = head samples in
         let logMhAcceptProb: Float = minf 0. (subf weight prevWeight) in
         let iter: Int = subi iter 1 in
-        if bernoulliSample (exp logMhAcceptProb) then
+        if mhAccept logMhAcceptProb then
           mcmcAccept ();
           mh (cons weight weights) (cons sample samples) iter
         else

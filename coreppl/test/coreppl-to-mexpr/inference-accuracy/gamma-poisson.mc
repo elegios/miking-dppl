@@ -17,16 +17,21 @@ let res: [(Int, String)]  = [
   (0  ,"-m 'is-lw' --cps partial --no-early-stop"),
   (0  ,"-m 'is-lw' --cps full"),
   (0  ,"-m 'is-lw' --cps full --no-early-stop"),
-  (0  ,"-m 'smc-bpf' --cps partial --resample manual"),
+  -- NOTE: `--resample manual` is disabled for smc-bpf and smc-apf. Neither
+  -- accuracy model contains a manual resample point, so cppl correctly refuses
+  -- to compile ("has no resample points, i.e. smc would be equivalent with
+  -- importance sampling"). These four entries asserted success and so failed
+  -- deterministically. Re-enable if a manual resample is added to the model.
+  --   (0  ,"-m 'smc-bpf' --cps partial --resample manual"),
   (0  ,"-m 'smc-bpf' --cps partial --resample align"),
   (0  ,"-m 'smc-bpf' --cps partial --resample likelihood"),
-  (0  ,"-m 'smc-bpf' --cps full --resample manual"),
+  --   (0  ,"-m 'smc-bpf' --cps full --resample manual"),
   (0  ,"-m 'smc-bpf' --cps full --resample align"),
   (0  ,"-m 'smc-bpf' --cps full --resample likelihood"),
-  (0  ,"-m 'smc-apf' --cps partial --resample manual"),
+  --   (0  ,"-m 'smc-apf' --cps partial --resample manual"),
   (0  ,"-m 'smc-apf' --cps partial --resample align"),
   (0  ,"-m 'smc-apf' --cps partial --resample likelihood"),
-  (0  ,"-m 'smc-apf' --cps full --resample manual"),
+  --   (0  ,"-m 'smc-apf' --cps full --resample manual"),
   (0  ,"-m 'smc-apf' --cps full --resample align"),
   (0  ,"-m 'smc-apf' --cps full --resample likelihood"),
   (500,"-m 'pmcmc-pimh' --cps partial"),

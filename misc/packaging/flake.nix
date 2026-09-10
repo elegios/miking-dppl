@@ -2,6 +2,11 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     relocatable.url = "github:elegios/relocatable.nix";
+    # NOTE: Without this, relocatable.nix pulls in its own pinned nixpkgs
+    # (stdenv on gcc 11.3), whose stdenv setup no longer works with current
+    # Nix -- `cppl-tmp-tar-gz` then fails in `toposorted-paths` with
+    # "/setup: No such file or directory".  treeppl's flake already follows.
+    relocatable.inputs.nixpkgs.follows = "nixpkgs";
     flake-utils.url = "github:numtide/flake-utils";
     miking.url = "github:miking-lang/miking?dir=misc/packaging";
     miking.inputs.nixpkgs.follows = "nixpkgs";

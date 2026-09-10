@@ -193,7 +193,7 @@ let run : all acc. all dAcc. all a. Config a acc dAcc -> (State -> a) -> use Run
         -- print "prevTraceLength: "; printLn (float2string (int2float prevTraceLength));
         -- print "traceLength: "; printLn (float2string (int2float traceLength));
         match
-          if bernoulliSample (exp logMhAcceptProb) then
+          if mhAccept logMhAcceptProb then
             mcmcAccept ();
             (true, proposalWeight, priorWeight, sample)
           else

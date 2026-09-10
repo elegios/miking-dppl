@@ -81,7 +81,7 @@ let run : all a. Config -> (State -> Checkpoint a) -> use RuntimeDistBase in Dis
             (negf inf)
             particles
         in
-        let expWeights = map (lam p. exp (subf p.weight maxWeight)) particles in
+        let expWeights = map (lam p. expWeightRel maxWeight p.weight) particles in
         let sums =
           foldl
             (lam acc. lam w. (addf acc.0 w, addf acc.1 (mulf w w)))
@@ -126,7 +126,7 @@ let run : all a. Config -> (State -> Checkpoint a) -> use RuntimeDistBase in Dis
         let prevWeights = head weightSets in
         let logMhAcceptProb = minf 0. (subf logZ prevLogZ) in
         let iter = subi iter 1 in
-        if bernoulliSample (exp logMhAcceptProb) then
+        if mhAccept logMhAcceptProb then
           mcmcAccept ();
           mh
             (cons logZ logZs)

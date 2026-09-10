@@ -36,7 +36,11 @@ utest expectation d with expected using eqfApprox 1e-1 in
 let d = infer (TraceMCMC { iterations = 100000 }) model1 in
 utest expectation d with expected using eqfApprox 1e-1 in
 
-let d = infer (NaiveMCMC { iterations = 1000 }) model1 in
+-- NOTE: 1000 iterations cannot meet a 0.1 tolerance here even in principle:
+-- the summed prior has sd ~4.7, so the standard error at 1000 iid draws is
+-- ~0.15 before any MCMC autocorrelation. It passed under owl's stream by
+-- luck. 100000 matches the TraceMCMC line above.
+let d = infer (NaiveMCMC { iterations = 100000 }) model1 in
 utest expectation d with expected using eqfApprox 1e-1 in
 
 let d =

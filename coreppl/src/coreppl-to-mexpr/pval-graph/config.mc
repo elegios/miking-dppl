@@ -23,7 +23,15 @@ type SimpleMCMCConfig =
   , iterations : Int
   }
 let simplePValGraphMCMC : all ret. SimpleMCMCConfig -> SimplePValRun ret = lam config.
-  let acceptPred = lam prob. bernoulliSample (exp prob) in
+  let acceptPred = lam prob.
+    -- NOTE: `prob` is a log acceptance ratio and is NaN when the proposed and
+    -- the current execution are both impossible (`-inf - -inf`). owl's
+    -- binomial_rvs took the resulting NaN probability without complaint and
+    -- returned 0, i.e. reject; the validating replacement raises. Reject
+    -- explicitly -- same behaviour, now deliberate. (mhAccept in
+    -- runtime-common.mc does the same for the non-graph runtimes; this file
+    -- does not include it.)
+    if neqf prob prob then false else bernoulliSample (exp prob) in
   let f : SimplePValRun ret = lam interface.
     recursive let init = lam.
       let res = interface.instantiate () in

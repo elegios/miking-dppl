@@ -16,7 +16,14 @@ let resampleBehavior: all a. Float -> a -> Int -> (a,([Bool], Int)) =
     let valu = if (assume (Bernoulli globalProb)) then
       negi 1
     else
-      assume (UniformDiscrete 0 (subi length 1))
+      -- NOTE: `maxi 0` guards the empty-trace case. A model with no random
+      -- choices (coreppl/test/coreppl-to-mexpr/infer/diff-confusion.mc) gives
+      -- length = 0 and hence `UniformDiscrete 0 (-1)`, an inverted range.
+      -- owl's uniform_int_rvs validated nothing and returned 0 for that; the
+      -- validating replacement raises. Clamping keeps both the number of
+      -- `assume`s and the value owl produced, and with an empty db the index
+      -- invalidates nothing either way.
+      assume (UniformDiscrete 0 (maxi 0 (subi length 1)))
     in
     let vec = create length (lam. true) in
     (acc,(vec, valu))

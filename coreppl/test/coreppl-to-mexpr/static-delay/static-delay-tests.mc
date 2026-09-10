@@ -94,7 +94,13 @@ let t17s = testCpplMExpr "static-delay/test17.mc" 1 in
 utest r (t17s 0   "-m is-lw --static-delay --no-print-samples --extract-simplification inline --cps none") with r (t17 0   "-m is-lw --no-print-samples") using e in
 
 let t18 = testCpplMExpr "static-delay/test18.mc" 100000 in
-let t18s = testCpplMExpr "static-delay/test18.mc" 100 in
+-- NOTE: 100 particles left this comparison decided by luck rather than by
+-- correctness: the delayed estimator's seed-to-seed sd there is ~0.062
+-- against a 2e-2 tolerance, so it passed under owl's stream and missed by
+-- 0.028 under the replacement's. The two estimators agree -- at 10000
+-- particles the delayed mean is -15.6484 against the reference -15.6476,
+-- with sd ~0.0078, i.e. the tolerance is now 2.6 sd rather than 0.3.
+let t18s = testCpplMExpr "static-delay/test18.mc" 10000 in
 utest r (t18s 0   "-m is-lw --static-delay --no-print-samples --extract-simplification inline --cps none") with r (t18 0   "-m is-lw --no-print-samples") using e in
 
 ()

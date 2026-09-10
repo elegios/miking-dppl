@@ -80,7 +80,16 @@ let run : all a. Unknown -> (State -> a) -> use RuntimeDistBase in Dist a =
           modref state.oldTrace (reverse (deref state.trace));
           modref state.trace emptyList;
           -- print "trace length: "; printLn (int2string (deref state.traceLength));
-          modref state.cut (uniformDiscreteSample 0 (subi prevTraceLength 1));
+          -- NOTE: `maxi 0` guards an empty trace. A model with no random
+          -- choices at all (coreppl/test/coreppl-to-mexpr/infer/
+          -- diff-confusion.mc) leaves prevTraceLength = 0, making this
+          -- `uniformDiscreteSample 0 (-1)`, an inverted range. owl's
+          -- uniform_int_rvs validated nothing and returned 0 for that; the
+          -- validating replacement raises. 0 is also the only sensible cut
+          -- point for an empty trace, so clamping preserves the behaviour
+          -- exactly rather than merely silencing the check.
+          modref state.cut
+            (uniformDiscreteSample 0 (maxi 0 (subi prevTraceLength 1)));
           -- print "cut: "; printLn (int2string (deref state.cut));
 
           let sample = model state in
@@ -94,7 +103,7 @@ let run : all a. Unknown -> (State -> a) -> use RuntimeDistBase in Dist a =
                           (subf (log (int2float prevTraceLength))
                                 (log (int2float traceLength)))) in
           let iter = subi iter 1 in
-          if bernoulliSample (exp logMhAcceptProb) then
+          if mhAccept logMhAcceptProb then
             mcmcAccept ();
             mh (cons weight weights) (cons sample samples) iter
           else

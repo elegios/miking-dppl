@@ -67,7 +67,16 @@ lang LightweightMCMCMethod = InferMethodBase + Assume
           , if_ (assume_ (bern_ (float_ _mcmcLightweightGlobalProbDefault)))
           (utuple_  [(create_ (var_ "length") (ulam_ "" (bool_ false))) ,(negi_ (int_ 2))])
           (utuple_  [(create_ (var_ "length") (ulam_ "" (bool_ true))) ,
-            (assume_ (uniformDiscrete_ (int_ 0) (subi_ (var_ "length") (int_ 1))))])
+            (assume_ (uniformDiscrete_ (int_ 0)
+              -- NOTE: `length` is 0 for a model with no random choices, which
+              -- made this `UniformDiscrete 0 (-1)` -- an inverted range. owl's
+              -- uniform_int_rvs validated nothing and returned 0; the
+              -- validating replacement raises, which is how this was found
+              -- (treeppl's lang/*.tppl models under `-m mcmc`). Clamping
+              -- keeps owl's value: with an empty db the chosen index
+              -- invalidates nothing either way.
+              (if_ (lti_ (var_ "length") (int_ 1)) (int_ 0)
+                   (subi_ (var_ "length") (int_ 1)))))])
           ]
         )))
         )
@@ -191,7 +200,16 @@ let mcmcLightweightOptions : OptParser (use LightweightMCMCMethod in InferMethod
           , if_ (assume_ (bern_ (float_ globalProb)))
           (utuple_  [(create_ (var_ "length") (ulam_ "" (bool_ false))) ,(negi_ (int_ 2))])
           (utuple_  [(create_ (var_ "length") (ulam_ "" (bool_ true))) ,
-            (assume_ (uniformDiscrete_ (int_ 0) (subi_ (var_ "length") (int_ 1))))])
+            (assume_ (uniformDiscrete_ (int_ 0)
+              -- NOTE: `length` is 0 for a model with no random choices, which
+              -- made this `UniformDiscrete 0 (-1)` -- an inverted range. owl's
+              -- uniform_int_rvs validated nothing and returned 0; the
+              -- validating replacement raises, which is how this was found
+              -- (treeppl's lang/*.tppl models under `-m mcmc`). Clamping
+              -- keeps owl's value: with an empty db the chosen index
+              -- invalidates nothing either way.
+              (if_ (lti_ (var_ "length") (int_ 1)) (int_ 0)
+                   (subi_ (var_ "length") (int_ 1)))))])
           ]
         )))
     , debug = utuple_ [unit_, ulam_ "" (ulam_ "" unit_)]
