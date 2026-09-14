@@ -462,7 +462,13 @@ let modelTreeInferenceP = lam.
   clusterP q trees 0.0 seqLength (length trees);()
 
 let treeNormConst = distEmpiricalNormConst (infer (Importance {particles = 10000, cps = "none",prune=true}) modelTreeInferenceP)
-utest treeNormConst with -79.28202 using eqfApprox 1e-5
+-- NOTE: Re-baselined for the mi-stats sampler. This asserts a *seeded* point
+-- estimate to 1e-5, but it is an importance-sampling normalising constant
+-- over 10000 particles whose seed-to-seed spread is about 0.09 (sampled over
+-- eight seeds: -79.45 to -79.12). owl's -79.28202 sits 0.24 sd from the mean
+-- of the replacement's runs, so the estimator is unchanged -- only the stream
+-- is. The tolerance tracks the RNG, not the model.
+utest treeNormConst with -79.3281795308 using eqfApprox 1e-5
 mexpr
 ()
 

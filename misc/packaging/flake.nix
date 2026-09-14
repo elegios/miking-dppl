@@ -42,7 +42,9 @@
               '';
               runtimeInputs = [
                 pkgs.ocamlPackages.findlib
-                pkgs.ocamlPackages.owl
+                # NOTE: `mi-stats` replaces owl here.  It is not a package of
+                # its own -- it is installed into miking-lib's site-lib,
+                # which the OCAMLPATH loop above already picks up.
                 pkgs.stdenv.cc
               ];
             };
@@ -53,7 +55,7 @@
             devShells.default = pkgs.mkShell {
               name = "Miking dev shell";
               inputsFrom = [ packages.miking-dppl-lib packages.miking-dppl-unwrapped ];
-              nativeBuildInputs = [ pkgs.ocamlPackages.owl pkgs.gdb pkgs.tup ];
+              nativeBuildInputs = [ pkgs.gdb pkgs.tup ];
             };
           };
     in flake-utils.lib.eachDefaultSystem mkPkg // rec {

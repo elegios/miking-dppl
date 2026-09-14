@@ -21,7 +21,12 @@ utest diff1 (lam x. mulf (notID 2.) x) 1. with 2. in
 
 setSeed 1;
 
-utest diff1 (lam x. mulf (gaussianSample 1. 1.) x) 1. with 1.77896425246
+-- NOTE: The expected value is re-baselined for the mi-stats sampler. It is
+-- the draw itself (d/dx of c*x is c), so it is tied to the generator: under
+-- owl `setSeed 1; gaussianSample 1. 1.` gave 1.77896425246, and the
+-- replacement's Mersenne Twister gives the value below. Nothing about the
+-- differentiation being tested changed.
+utest diff1 (lam x. mulf (gaussianSample 1. 1.) x) 1. with 3.28492946069
   using eqfApprox 1e-5
 in
 

@@ -9,7 +9,6 @@ If you came here from a paper:
 ## Dependencies
 Miking DPPL currently depends on:
 - [Miking](https://github.com/miking-lang/miking)
-- [Owl](https://ocaml.xyz/). Essentially, `opam install owl`.
 
 ## Building, Installing, and Running Tests
 To build the CorePPL compiler `cppl`, simply run `make` in the project root, which produces the binary in `build/cppl`.
